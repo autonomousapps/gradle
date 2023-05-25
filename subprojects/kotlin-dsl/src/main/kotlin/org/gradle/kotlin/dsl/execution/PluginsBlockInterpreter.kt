@@ -59,11 +59,11 @@ fun interpret(program: Program.Plugins): PluginsBlockInterpretation {
 private
 val pluginsBlockParser = run {
 
-    val parenString = paren(stringLiteral())
+    val parenString = paren(stringLiteral)
 
     val kotlinPluginId = symbol("kotlin") * parenString.map { "org.jetbrains.kotlin.$it" }
 
-    val pluginId = (symbol("id") * parenString + kotlinPluginId) * ws()
+    val pluginId = (symbol("id") * parenString + kotlinPluginId)
 
     val dot = wsOrNewLine() * token(DOT) * wsOrNewLine()
 
@@ -75,13 +75,13 @@ val pluginsBlockParser = run {
 
     val parenBool = paren(bool)
 
-    val dotVersion = dot * version * parenString * ws()
+    val dotVersion = dot * version * parenString
 
-    val dotApply = dot * apply * parenBool * ws()
+    val dotApply = dot * apply * parenBool
 
-    val infixVersion = version * (parenString + stringLiteral()) * ws()
+    val infixVersion = version * (parenString + stringLiteral)
 
-    val infixApply = apply * (parenBool + bool) * ws()
+    val infixApply = apply * (parenBool + bool)
 
     val optionalApply = optional(dotApply + infixApply)
 

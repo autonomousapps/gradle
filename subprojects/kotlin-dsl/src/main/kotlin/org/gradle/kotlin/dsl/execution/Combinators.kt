@@ -18,19 +18,41 @@ package org.gradle.kotlin.dsl.execution
 
 import org.jetbrains.kotlin.lexer.KotlinLexer
 import org.jetbrains.kotlin.lexer.KtToken
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.lexer.KtTokens.CLOSING_QUOTE
 import org.jetbrains.kotlin.lexer.KtTokens.COMMENTS
 import org.jetbrains.kotlin.lexer.KtTokens.IDENTIFIER
+import org.jetbrains.kotlin.lexer.KtTokens.LBRACE
+import org.jetbrains.kotlin.lexer.KtTokens.LBRACKET
 import org.jetbrains.kotlin.lexer.KtTokens.LPAR
 import org.jetbrains.kotlin.lexer.KtTokens.OPEN_QUOTE
+import org.jetbrains.kotlin.lexer.KtTokens.RBRACE
+import org.jetbrains.kotlin.lexer.KtTokens.RBRACKET
 import org.jetbrains.kotlin.lexer.KtTokens.REGULAR_STRING_PART
 import org.jetbrains.kotlin.lexer.KtTokens.RPAR
 import org.jetbrains.kotlin.lexer.KtTokens.SEMICOLON
 import org.jetbrains.kotlin.lexer.KtTokens.WHITE_SPACE
+import kotlin.reflect.KProperty
 
 
 internal
 typealias Parser<T> = KotlinLexer.() -> ParserResult<T>
+
+
+internal
+class ParserDebugger {
+    var level = 0
+
+    fun <T> debug(name: String, parser: Parser<T>): Parser<T> = {
+        val levelString = "\t".repeat(level)
+        println("${levelString}Parsing with $name @ ${this.currentPosition.offset} ...")
+        level++
+        val result = parser()
+        level--
+        println("${levelString}Parsing with $name done @ ${this.currentPosition.offset}, ${if (result is ParserResult.Success) "successful" else "failed"}")
+        result
+    }
+}
 
 
 internal
@@ -51,7 +73,68 @@ operator fun <T> Parser<T>.invoke(input: String) =
 
 
 internal
+class ParserRef<T> {
+    operator fun getValue(t: Any?, property: KProperty<*>): Parser<T> =
+        ref
+
+    operator fun setValue(t: Any?, property: KProperty<*>, value: Parser<T>) {
+        parser = value
+    }
+
+    private
+    var parser: Parser<T> = { error("Parser cannot be used while it's being constructed") }
+
+    private
+    val ref: Parser<T> = { parser() }
+}
+
+
+/**
+ * Creates a recursive parser.
+ *
+ * It's a shell parser, holding a mutable reference to another parser.
+ * Can be combined with other parsers in the usual way and its delegate can be set at a later moment in time.
+ *
+ * For example, a parser for a balanced parenthesized symbolic expression can be defined as:
+ * ```
+ * var parser by recursive<String>()
+ * parser = paren(parser) + token(IDENTIFIER) { tokenText }
+ * ```
+ *
+ * This will successfully parse all of the below examples:
+ * ```
+ * ok
+ * (ok)
+ * ((ok))
+ * (((ok)))
+ * ```
+ *
+ * **WARNING** care must be taken to avoid infinite recursion, the delegate parser should always have
+ * an input consuming parser at its front (e.g., in `p = paren(p) + p`, the `p` at the right would
+ * cause an infinite recursion).
+ */
+internal
+fun <T> recursive(): ParserRef<T> = ParserRef()
+
+
+internal
 fun <T> zeroOrMore(parser: Parser<T>): Parser<List<T>> = {
+    val lazyResult: MutableList<T>? = orMore(parser)
+    ParserResult.Success(lazyResult ?: emptyList())
+}
+
+
+internal
+fun <T> oneOrMore(parser: Parser<T>): Parser<List<T>> = {
+    when (val lazyResult: MutableList<T>? = orMore(parser)) {
+        null -> failure("Expecting at least one occurrence, but none found")
+        else -> ParserResult.Success(lazyResult as List<T>)
+    }
+}
+
+
+private
+fun <T> KotlinLexer.orMore(parser: Parser<T>): MutableList<T>? {
     var lazyResult: MutableList<T>? = null
     while (tokenType != null) {
         val mark = currentPosition
@@ -67,7 +150,7 @@ fun <T> zeroOrMore(parser: Parser<T>): Parser<List<T>> = {
             }
         }
     }
-    ParserResult.Success(lazyResult ?: emptyList())
+    return lazyResult
 }
 
 
@@ -162,6 +245,26 @@ inline fun <L, R, T> either(
 
 
 internal
+fun symbol(): Parser<Unit> {
+    return {
+        when (tokenType) {
+            IDENTIFIER -> {
+                advance()
+                skipWhitespace(false)
+                unitSuccess
+            }
+            null -> {
+                failure("Expecting a symbol")
+            }
+            else -> {
+                failure("Expecting a symbol, but got a token of type '$tokenType' instead")
+            }
+        }
+    }
+}
+
+
+internal
 fun symbol(s: String): Parser<Unit> {
     return {
         if (tokenType == IDENTIFIER && tokenText == s) {
@@ -180,12 +283,30 @@ fun symbol(s: String): Parser<Unit> {
 
 
 internal
-fun stringLiteral(): Parser<String> =
-    stringLiteral_
+val booleanLiteral =
+    token(KtTokens.TRUE_KEYWORD) + token(KtTokens.FALSE_KEYWORD)
 
 
-private
-val stringLiteral_: Parser<String> =
+/**
+ * Can parse regular integers, unsigned integers, longs, unsigned longs, and HEX and BINARY representations as well.
+ */
+internal
+val integerLiteral =
+    token(KtTokens.INTEGER_LITERAL)
+
+
+internal
+val floatLiteral =
+    token(KtTokens.FLOAT_LITERAL)
+
+
+internal
+val characterLiteral =
+    token(KtTokens.CHARACTER_LITERAL)
+
+
+internal
+val stringLiteral =
     token(OPEN_QUOTE) *
         token(REGULAR_STRING_PART) { tokenText } *
         token(CLOSING_QUOTE)
@@ -203,6 +324,7 @@ inline fun <T> token(token: KtToken, crossinline f: KotlinLexer.() -> T): Parser
             token -> {
                 ParserResult.Success(f()).also {
                     advance()
+                    skipWhitespace(false)
                 }
             }
 
@@ -215,17 +337,6 @@ inline fun <T> token(token: KtToken, crossinline f: KotlinLexer.() -> T): Parser
 
 
 internal
-fun ws(): Parser<Unit> = ws_
-
-
-private
-val ws_: Parser<Unit> = {
-    skipWhitespace(false)
-    unitSuccess
-}
-
-
-internal
 fun wsOrNewLine(): Parser<Unit> = {
     skipWhitespace(true)
     unitSuccess
@@ -234,24 +345,40 @@ fun wsOrNewLine(): Parser<Unit> = {
 
 internal
 inline fun <T> paren(crossinline parser: Parser<T>): Parser<T> =
-    lpar * ws() * parser * ws() * rpar
-
-
-private
-val lpar = token(LPAR)
-
-
-private
-val rpar = token(RPAR)
+    token(LPAR) * parser * token(RPAR)
 
 
 internal
-fun <T : Any> optional(parser: Parser<T>): Parser<T?> = {
+inline fun <T> bracket(crossinline parser: Parser<T>): Parser<T> =
+    token(LBRACKET) * parser * token(RBRACKET)
+
+
+internal
+inline fun <T> brace(crossinline parser: Parser<T>): Parser<T> =
+    token(LBRACE) * parser * token(RBRACE)
+
+
+internal
+fun <T> optional(parser: Parser<T>): Parser<T?> = {
     val mark = currentPosition
     when (val r = parser()) {
         is ParserResult.Failure -> {
             restore(mark)
             nullSuccess
+        }
+
+        is ParserResult.Success -> r
+    }
+}
+
+
+internal
+fun optionalX(parser: Parser<Unit>): Parser<Unit> = {
+    val mark = currentPosition
+    when (val r = parser()) {
+        is ParserResult.Failure -> {
+            restore(mark)
+            ParserResult.Success(Unit)
         }
 
         is ParserResult.Success -> r

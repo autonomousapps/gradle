@@ -56,6 +56,7 @@ data class Packaged<T>(
 internal
 data class LexedScript(
     val comments: List<IntRange>,
+    val annotations: List<IntRange>,
     val topLevelBlocks: List<TopLevelBlock>
 )
 
@@ -68,6 +69,7 @@ fun lex(script: String, vararg topLevelBlockIds: TopLevelBlockId): Packaged<Lexe
 
     var packageName: String? = null
     val comments = mutableListOf<IntRange>()
+    val annotations = mutableListOf<IntRange>()
     val topLevelBlocks = mutableListOf<TopLevelBlock>()
 
     var state = State.SearchingTopLevelBlock
@@ -99,6 +101,21 @@ fun lex(script: String, vararg topLevelBlockIds: TopLevelBlockId): Packaged<Lexe
         return false
     }
 
+    fun KotlinLexer.parseAnnotation(): IntRange? {
+        val startIndex = currentPosition
+
+        if (fileAnnotationParser() is ParserResult.Success<*>) {
+            return null; // ignoring file annotation
+        }
+
+        restore(startIndex)
+        if (annotationParser() is ParserResult.Success<*>) {
+            return startIndex.offset until currentPosition.offset
+        }
+
+        return null
+    }
+
     KotlinLexer().apply {
         start(script)
         while (tokenType != null) {
@@ -107,6 +124,18 @@ fun lex(script: String, vararg topLevelBlockIds: TopLevelBlockId): Packaged<Lexe
 
                 WHITE_SPACE -> {
                     // ignore
+                }
+
+                KtTokens.AT -> {
+
+                    when (state) {
+                        State.SearchingTopLevelBlock -> {
+                            parseAnnotation()?.also { annotations.add(it) }
+                        }
+                        else -> {
+                            // ignore
+                        }
+                    }
                 }
 
                 in COMMENTS -> {
@@ -174,7 +203,7 @@ fun lex(script: String, vararg topLevelBlockIds: TopLevelBlockId): Packaged<Lexe
     }
     return Packaged(
         packageName,
-        LexedScript(comments, topLevelBlocks)
+        LexedScript(comments, annotations, topLevelBlocks)
     )
 }
 

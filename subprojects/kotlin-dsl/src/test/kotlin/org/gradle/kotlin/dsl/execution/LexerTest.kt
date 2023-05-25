@@ -32,15 +32,18 @@ class LexerTest {
 
         assertThat(
             lex(
-                "/* ... */" +
-                    "\n// ..." +
+                "/* ... @TaskAction ... */" +
+                    "\n// ... @Suppress(\"unused_variable\")" +
                     "\nbuildscript { /*" +
                     "\n ... */" +
                     "\n}" +
+                    "\n@Suppress(\"unused_variable\")" +
                     "\nplugins { /*" +
                     "\n ... */" +
                     "\n}" +
-                    "\n// ...",
+                    "\n// ..." +
+                    "\n   @TaskAction" +
+                    "\nprintln(\"Yolo!\")",
                 buildscript, plugins
             ),
             equalTo(
@@ -48,15 +51,18 @@ class LexerTest {
                     null,
                     LexedScript(
                         listOf(
-                            0..8,
-                            10..15,
-                            31..40,
-                            54..63,
-                            67..72
+                            0..24,
+                            26..60,
+                            76..85,
+                            128..137,
+                            141..146
                         ),
                         listOf(
-                            topLevelBlock(buildscript, 17..27, 29..42),
-                            topLevelBlock(plugins, 44..50, 52..65)
+                            89..116
+                        ), // todo
+                        listOf(
+                            topLevelBlock(buildscript, 62..72, 74..87),
+                            topLevelBlock(plugins, 118..124, 126..139)
                         )
                     )
                 )
@@ -92,6 +98,7 @@ class LexerTest {
                     "com.example",
                     LexedScript(
                         listOf(1..9, 11..56, 84..110, 148..203, 319..357),
+                        listOf(), // todo
                         listOf(topLevelBlock(plugins, 378..384, 386..388))
                     )
                 )
