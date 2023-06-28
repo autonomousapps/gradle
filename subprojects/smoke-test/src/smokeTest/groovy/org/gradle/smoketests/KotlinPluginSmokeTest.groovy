@@ -25,7 +25,7 @@ import org.gradle.util.internal.VersionNumber
 import spock.lang.Issue
 
 import static org.gradle.api.internal.DocumentationRegistry.RECOMMENDATION
-import static org.gradle.internal.reflect.validation.Severity.WARNING
+import static org.gradle.api.problems.interfaces.Severity.WARNING
 import static org.gradle.testkit.runner.TaskOutcome.SUCCESS
 import static org.gradle.testkit.runner.TaskOutcome.UP_TO_DATE
 import static org.junit.Assume.assumeFalse
