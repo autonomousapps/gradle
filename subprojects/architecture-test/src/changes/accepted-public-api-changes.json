@@ -41,6 +41,14 @@
             ]
         },
         {
+            "type": "org.gradle.kotlin.dsl.ToolchainManagementExtensionsKt",
+            "member": "Class org.gradle.kotlin.dsl.ToolchainManagementExtensionsKt",
+            "acceptation": "Extract toolchains project",
+            "changes": [
+                "Class has been removed"
+            ]
+        },
+        {
             "type": "org.gradle.util.SingleMessageLogger",
             "member": "Class org.gradle.util.SingleMessageLogger",
             "acceptation": "Changed the signature of internal method",
