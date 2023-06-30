@@ -42,8 +42,8 @@ import java.util.function.Supplier;
 class LockingLazy<T> implements Lazy<T> {
     private volatile Supplier<T> supplier;
     private volatile boolean initialized;
-    // "value" does not need to be volatile; visibility piggy-backs
-    // on volatile read of "initialized".
+    // "value" does not need to be volatile;
+    // visibility piggybacks on volatile read of "initialized".
     @Nullable
     private T value;
 
