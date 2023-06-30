@@ -40,6 +40,7 @@ import java.util.function.Supplier;
  */
 @ThreadSafe
 class LockingLazy<T> implements Lazy<T> {
+    @Nullable
     private volatile Supplier<T> supplier;
     private volatile boolean initialized;
     // "value" does not need to be volatile;
@@ -57,6 +58,7 @@ class LockingLazy<T> implements Lazy<T> {
         if (!initialized) {
             synchronized (this) {
                 if (!initialized) {
+                    //noinspection DataFlowIssue `supplier` cannot be null here
                     T t = supplier.get();
                     value = t;
                     initialized = true;
@@ -66,6 +68,7 @@ class LockingLazy<T> implements Lazy<T> {
                 }
             }
         }
+        //noinspection DataFlowIssue `value` can be null
         return value;
     }
 }
